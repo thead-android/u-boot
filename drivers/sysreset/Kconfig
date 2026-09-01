@@ -64,6 +64,13 @@ config SYSRESET_CV1800B
 	help
 	  Enable system reset support for Sophgo cv1800b SoC.
 
+config SYSRESET_TH1520
+	bool "Enable support for T-Head TH1520 system reset"
+	depends on THEAD_TH1520
+	help
+	  Enable system reset support for the T-Head TH1520 SoC using the
+	  always-on reset generator and watchdog 0.
+
 config POWEROFF_GPIO
 	bool "Enable support for GPIO poweroff driver"
 	depends on DM_GPIO

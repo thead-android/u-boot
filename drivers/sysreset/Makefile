@@ -8,6 +8,7 @@ obj-$(CONFIG_ARCH_ROCKCHIP) += sysreset_rockchip.o
 obj-$(CONFIG_ARCH_STI) += sysreset_sti.o
 obj-$(CONFIG_SANDBOX) += sysreset_sandbox.o
 obj-$(CONFIG_SYSRESET_CV1800B) += sysreset_cv1800b.o
+obj-$(CONFIG_SYSRESET_TH1520) += sysreset_th1520.o
 obj-$(CONFIG_$(PHASE_)POWEROFF_GPIO) += poweroff_gpio.o
 obj-$(CONFIG_$(PHASE_)SYSRESET_GPIO) += sysreset_gpio.o
 obj-$(CONFIG_$(PHASE_)SYSRESET_MAX77663) += sysreset_max77663.o

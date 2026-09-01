@@ -6,6 +6,12 @@
 #include "th1520-lichee-module-4a-u-boot.dtsi"
 #include "thead-th1520-binman.dtsi"
 
+/ {
+	sysreset {
+		compatible = "thead,th1520-sysreset";
+	};
+};
+
 &clk {
 	bootph-some-ram;
 };

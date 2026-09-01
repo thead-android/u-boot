@@ -46,8 +46,7 @@
 	"android_select_active=if bcb ab_select android_slot mmc 0#misc; then " \
 		"setenv slot_suffix _${android_slot}; setenv bs; setenv bz; setenv vs; " \
 		"setenv vz; setenv is; setenv iz; setenv android_has_init_boot; true; " \
-		"else echo A/B metadata unavailable, falling back to slot _a; " \
-		"run android_select_a; fi\0" \
+		"else echo No bootable Android slot, entering fastboot; false; fi\0" \
 	"android_parts=if part start mmc 0 boot_${android_slot} bs && " \
 		"part size mmc 0 boot_${android_slot} bz && " \
 		"part start mmc 0 vendor_boot_${android_slot} vs && " \
@@ -77,7 +76,7 @@
 		"if run android_setup && run android_load && run android_args_core && " \
 		"run android_args_slot; then bootm ${loadaddr}; " \
 		"else echo Android slot ${slot_suffix} boot aborted; false; fi\0" \
-	"boot_android=if run android_mmc; then run android_select_active; " \
+	"boot_android=if run android_mmc && run android_select_active; then " \
 		"run android_boot_selected; else false; fi\0" \
 	"boot_android_a=run android_select_a; run android_boot_selected\0" \
 	"boot_android_b=run android_select_b; run android_boot_selected\0" \

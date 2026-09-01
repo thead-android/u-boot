@@ -30,6 +30,8 @@ config SPL_OPENSBI_LOAD_ADDR
 config BOARD_SPECIFIC_OPTIONS
 	def_bool y
 	select ARCH_EARLY_INIT_R
+	select SYSRESET
+	select SYSRESET_TH1520
 	select THEAD_TH1520
 	imply CPU
 	imply CPU_RISCV
