@@ -37,6 +37,10 @@
 		"setenv vendor_boot_comp_addr_r 0x18000000; setenv ramdisk_addr_r 0x20000000; " \
 		"setenv init_boot_comp_addr_r 0x28000000; setenv fdt_addr_r 0x30000000\0" \
 	"android_mmc=mmc dev 0 0\0" \
+	"android_bootloader_requested=if bcb load mmc 0 misc; then " \
+		"if bcb test command = bootonce-bootloader; then " \
+		"echo BCB requests bootloader; bcb clear command; bcb store; true; " \
+		"else false; fi; else false; fi\0" \
 	"android_select_a=setenv android_slot a; setenv slot_suffix _a; " \
 		"setenv bs; setenv bz; setenv vs; setenv vz; setenv is; setenv iz; " \
 		"setenv android_has_init_boot\0" \
