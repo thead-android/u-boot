@@ -3,6 +3,7 @@
  * Copyright (C) 2016 The Android Open Source Project
  */
 
+#include <android_ab.h>
 #include <env.h>
 #include <fastboot.h>
 #include <fastboot-internal.h>
@@ -23,6 +24,7 @@ static void getvar_serialno(char *var_parameter, char *response);
 static void getvar_version_baseband(char *var_parameter, char *response);
 static void getvar_product(char *var_parameter, char *response);
 static void getvar_platform(char *var_parameter, char *response);
+static void getvar_slot_count(char *var_parameter, char *response);
 static void getvar_current_slot(char *var_parameter, char *response);
 static void getvar_has_slot(char *var_parameter, char *response);
 static void getvar_partition_type(char *part_name, char *response);
@@ -65,6 +67,10 @@ static const struct {
 	}, {
 		.variable = "platform",
 		.dispatch = getvar_platform,
+		.list = true
+	}, {
+		.variable = "slot-count",
+		.dispatch = getvar_slot_count,
 		.list = true
 	}, {
 		.variable = "current-slot",
@@ -193,10 +199,39 @@ static void getvar_platform(char *var_parameter, char *response)
 		fastboot_fail("platform not set", response);
 }
 
+static void getvar_slot_count(char *var_parameter, char *response)
+{
+#if defined(CONFIG_ANDROID_AB)
+	fastboot_response("OKAY", response, "%u", NUM_SLOTS);
+#else
+	fastboot_okay("0", response);
+#endif
+}
+
 static void getvar_current_slot(char *var_parameter, char *response)
 {
-	/* A/B not implemented, for now always return "a" */
-	fastboot_okay("a", response);
+#if defined(CONFIG_ANDROID_AB) && defined(CONFIG_FASTBOOT_FLASH_MMC)
+	struct disk_partition part_info;
+	struct blk_desc *dev_desc;
+	char slot_name[2] = { 0 };
+	int slot, ret;
+
+	ret = fastboot_mmc_get_part_info("misc", &dev_desc, &part_info,
+					 response);
+	if (ret < 0)
+		return;
+
+	slot = ab_select_slot(dev_desc, &part_info, false);
+	if (slot < 0) {
+		fastboot_fail("cannot read active slot", response);
+		return;
+	}
+
+	slot_name[0] = BOOT_SLOT_NAME(slot);
+	fastboot_okay(slot_name, response);
+#else
+	fastboot_fail("A/B slots are not supported", response);
+#endif
 }
 
 static void __maybe_unused getvar_has_slot(char *part_name, char *response)

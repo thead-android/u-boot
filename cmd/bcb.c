@@ -420,6 +420,42 @@ __maybe_unused static int do_bcb_ab_select(struct cmd_tbl *cmdtp,
 	return CMD_RET_SUCCESS;
 }
 
+__maybe_unused static int do_bcb_ab_set_active(struct cmd_tbl *cmdtp,
+					int flag, int argc,
+					char *const argv[])
+{
+	struct blk_desc *dev_desc;
+	struct disk_partition part_info;
+	const char *suffix;
+	int slot, ret;
+
+	if (argc != 4)
+		return CMD_RET_USAGE;
+
+	suffix = argv[1];
+	if (*suffix == '_')
+		suffix++;
+	if (suffix[0] < 'a' || suffix[0] >= 'a' + NUM_SLOTS ||
+	    suffix[1] != '\0')
+		return CMD_RET_USAGE;
+
+	if (part_get_info_by_dev_and_name_or_num(argv[2], argv[3],
+						 &dev_desc, &part_info,
+						 false) < 0)
+		return CMD_RET_FAILURE;
+
+	slot = suffix[0] - 'a';
+	ret = ab_set_active(dev_desc, &part_info, slot);
+	if (ret < 0) {
+		printf("Cannot activate Android slot %c, error %d.\n",
+		       BOOT_SLOT_NAME(slot), ret);
+		return CMD_RET_FAILURE;
+	}
+
+	printf("ANDROID: Activated slot: %c\n", BOOT_SLOT_NAME(slot));
+	return CMD_RET_SUCCESS;
+}
+
 __maybe_unused static int do_bcb_ab_dump(struct cmd_tbl *cmdtp,
 					 int flag, int argc,
 					 char *const argv[])
@@ -456,6 +492,10 @@ U_BOOT_LONGHELP(bcb,
 	"bcb store                      - store BCB back to <interface>\n"
 	"\n"
 #if IS_ENABLED(CONFIG_ANDROID_AB)
+	"bcb ab_set_active -\n"
+	"    Mark a slot active with a fresh retry count.\n"
+	"    <slot_name> <interface> <dev[:part|#part_name]>\n"
+	"\n"
 	"bcb ab_select -\n"
 	"    Select the slot used to boot from and register the boot attempt.\n"
 	"    <slot_var_name> <interface> <dev[:part|#part_name]> [--no-dec]\n"
@@ -498,6 +538,7 @@ U_BOOT_CMD_WITH_SUBCMDS(bcb,
 	U_BOOT_SUBCMD_MKENT(dump, 2, 1, do_bcb_dump),
 	U_BOOT_SUBCMD_MKENT(store, 1, 1, do_bcb_store),
 #if IS_ENABLED(CONFIG_ANDROID_AB)
+	U_BOOT_SUBCMD_MKENT(ab_set_active, 4, 1, do_bcb_ab_set_active),
 	U_BOOT_SUBCMD_MKENT(ab_select, 5, 1, do_bcb_ab_select),
 	U_BOOT_SUBCMD_MKENT(ab_dump, 3, 1, do_bcb_ab_dump),
 #endif

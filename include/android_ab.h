@@ -37,6 +37,22 @@ int ab_select_slot(struct blk_desc *dev_desc, struct disk_partition *part_info,
                    bool dec_tries);
 
 /**
+ * ab_set_active() - Mark an Android boot slot active.
+ *
+ * @dev_desc: Device containing the boot control block
+ * @part_info: Partition containing the boot control block (normally misc)
+ * @slot: Zero-based slot number
+ *
+ * The selected slot is made bootable with the maximum priority and a fresh
+ * retry count. Any other slot at the maximum priority is lowered so the newly
+ * selected slot wins the next boot selection.
+ *
+ * Return: 0 on success, or a negative error code
+ */
+int ab_set_active(struct blk_desc *dev_desc, struct disk_partition *part_info,
+		  int slot);
+
+/**
  * ab_dump_abc() - Dump ABC information for specific partition.
  *
  * @dev_desc: Device description pointer

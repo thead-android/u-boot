@@ -8,6 +8,7 @@
  */
 #include <command.h>
 #include <console.h>
+#include <env.h>
 #include <g_dnl.h>
 #include <fastboot.h>
 #include <net.h>
@@ -89,6 +90,7 @@ static int do_fastboot_usb(int argc, char *const argv[],
 	}
 
 	g_dnl_clear_detach();
+	env_set("fastboot_continue_requested", NULL);
 	ret = g_dnl_register("usb_dnl_fastboot");
 	if (ret)
 		return ret;
@@ -115,6 +117,14 @@ exit:
 	udc_device_put(udc);
 	g_dnl_unregister();
 	g_dnl_clear_detach();
+
+	if (env_get("fastboot_continue_requested")) {
+		const char *continue_cmd = env_get("fastboot_continue");
+
+		env_set("fastboot_continue_requested", NULL);
+		if (continue_cmd)
+			ret = run_command(continue_cmd, 0);
+	}
 
 	return ret;
 }

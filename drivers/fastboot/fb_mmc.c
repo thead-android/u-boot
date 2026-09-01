@@ -115,6 +115,8 @@ static int part_get_info_by_name_or_alias(struct blk_desc **dev_desc,
 static void fb_mmc_boot_ops(struct blk_desc *dev_desc, void *buffer,
 			    int hwpart, u32 buff_sz, char *response)
 {
+	int original_hwpart = dev_desc->hwpart;
+
 	// To operate on EMMC_BOOT1/2 (mmc0boot0/1) we first change the hwpart
 	if (blk_dselect_hwpart(dev_desc, hwpart)) {
 		pr_err("Failed to select hwpart\n");
@@ -127,6 +129,15 @@ static void fb_mmc_boot_ops(struct blk_desc *dev_desc, void *buffer,
 					      buffer, buff_sz, response);
 	else /* erase */
 		fastboot_block_raw_erase_disk(dev_desc, "EMMC_BOOT", response);
+
+	/* All named Android partitions live in the user hardware partition. */
+	if (blk_dselect_hwpart(dev_desc, original_hwpart)) {
+		pr_err("Failed to restore hwpart %d\n", original_hwpart);
+		fastboot_fail("Failed to restore eMMC hwpart", response);
+		return;
+	}
+	if (!original_hwpart)
+		part_init(dev_desc);
 }
 #endif
 

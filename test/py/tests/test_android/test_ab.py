@@ -54,7 +54,7 @@ def ab_disk_image(ubman):
         di = ABTestDiskImage(ubman)
     return di
 
-def ab_dump(ubman, slot_num, crc):
+def ab_dump(ubman, slot_num, crc, tries_remaining=6):
     output = ubman.run_command('bcb ab_dump host 0#misc')
     header, slot0, slot1 = output.split('\r\r\n\r\r\n')
     slots = [slot0, slot1]
@@ -71,7 +71,7 @@ def ab_dump(ubman, slot_num, crc):
 
     slot = dict(map(lambda x: map(str.strip, x.split(':')), slots[slot_num].split('\r\r\n\t- ')[1:]))
     assert slot['Priority'] == '15'
-    assert slot['Tries Remaining'] == '6'
+    assert slot['Tries Remaining'] == str(tries_remaining)
     assert slot['Successful Boot'] == '0'
     assert slot['Verity Corrupted'] == '0'
 
@@ -96,3 +96,9 @@ def test_ab(ab_disk_image, ubman):
     output = ubman.run_command('printenv slot_name')
     assert 'slot_name=b' in output
     ab_dump(ubman, 1, '0x011ec016')
+
+    output = ubman.run_command('bcb ab_set_active a host 0#misc')
+    assert 'Activated slot: a' in output
+    output = ubman.run_command('bcb ab_select slot_name host 0#misc --no-dec')
+    assert 'Booting slot: a' in output
+    ab_dump(ubman, 0, '0xc9a2323d', tries_remaining=7)

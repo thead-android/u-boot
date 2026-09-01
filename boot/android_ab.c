@@ -376,6 +376,89 @@ int ab_select_slot(struct blk_desc *dev_desc, struct disk_partition *part_info,
 	return slot;
 }
 
+int ab_set_active(struct blk_desc *dev_desc, struct disk_partition *part_info,
+		  int slot)
+{
+	struct bootloader_control *abc = NULL;
+	struct bootloader_control *backup_abc = NULL;
+	struct slot_metadata *selected;
+	u32 crc32_le;
+	char slot_suffix[4] = { '_', '\0', '\0', '\0' };
+	bool valid_backup = false;
+	int i, ret;
+
+	if (!dev_desc || !part_info || slot < 0 || slot >= NUM_SLOTS)
+		return -EINVAL;
+
+	ret = ab_control_create_from_disk(dev_desc, part_info, &abc, 0);
+	if (ret < 0)
+		return ret;
+
+	if (CONFIG_ANDROID_AB_BACKUP_OFFSET) {
+		ret = ab_control_create_from_disk(dev_desc, part_info, &backup_abc,
+						  CONFIG_ANDROID_AB_BACKUP_OFFSET);
+		if (ret < 0)
+			goto out;
+	}
+
+	crc32_le = ab_control_compute_crc(abc);
+	if (abc->crc32_le != crc32_le || abc->magic != BOOT_CTRL_MAGIC ||
+	    abc->version > BOOT_CTRL_VERSION || !abc->nb_slot ||
+	    abc->nb_slot > ARRAY_SIZE(abc->slot_info)) {
+		if (backup_abc) {
+			crc32_le = ab_control_compute_crc(backup_abc);
+			valid_backup = backup_abc->crc32_le == crc32_le &&
+				       backup_abc->magic == BOOT_CTRL_MAGIC &&
+				       backup_abc->version <= BOOT_CTRL_VERSION &&
+				       backup_abc->nb_slot &&
+				       backup_abc->nb_slot <=
+					       ARRAY_SIZE(backup_abc->slot_info);
+		}
+
+		if (valid_backup) {
+			log_info("ANDROID: Restoring A/B metadata from backup.\n");
+			memcpy(abc, backup_abc, sizeof(*abc));
+		} else {
+			log_info("ANDROID: Initializing A/B metadata.\n");
+			ret = ab_control_default(abc);
+			if (ret < 0)
+				goto out;
+		}
+	}
+
+	if (slot >= abc->nb_slot) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	selected = &abc->slot_info[slot];
+	selected->priority = 15;
+	selected->tries_remaining = 7;
+	selected->successful_boot = 0;
+	selected->verity_corrupted = 0;
+
+	for (i = 0; i < abc->nb_slot; ++i) {
+		if (i != slot && abc->slot_info[i].priority >= selected->priority)
+			abc->slot_info[i].priority = selected->priority - 1;
+	}
+
+	slot_suffix[1] = BOOT_SLOT_NAME(slot);
+	memcpy(abc->slot_suffix, slot_suffix, sizeof(slot_suffix));
+	abc->crc32_le = ab_control_compute_crc(abc);
+
+	ret = ab_control_store(dev_desc, part_info, abc, 0);
+	if (ret < 0)
+		goto out;
+
+	if (CONFIG_ANDROID_AB_BACKUP_OFFSET)
+		ret = ab_control_store(dev_desc, part_info, abc,
+				       CONFIG_ANDROID_AB_BACKUP_OFFSET);
+out:
+	free(backup_abc);
+	free(abc);
+	return ret;
+}
+
 int ab_dump_abc(struct blk_desc *dev_desc, struct disk_partition *part_info)
 {
 	struct bootloader_control *abc;

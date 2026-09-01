@@ -3,6 +3,7 @@
  * Copyright (C) 2016 The Android Open Source Project
  */
 
+#include <android_ab.h>
 #include <command.h>
 #include <console.h>
 #include <env.h>
@@ -33,6 +34,8 @@ static u32 fastboot_bytes_received;
 static u32 fastboot_bytes_expected;
 
 static void okay(char *, char *);
+static void continue_boot(char *, char *);
+static void set_active(char *, char *);
 static void getvar(char *, char *);
 static void download(char *, char *);
 static void flash(char *, char *);
@@ -74,7 +77,7 @@ static const struct {
 	},
 	[FASTBOOT_COMMAND_CONTINUE] =  {
 		.command = "continue",
-		.dispatch = okay
+		.dispatch = continue_boot
 	},
 	[FASTBOOT_COMMAND_REBOOT] =  {
 		.command = "reboot",
@@ -94,7 +97,7 @@ static const struct {
 	},
 	[FASTBOOT_COMMAND_SET_ACTIVE] =  {
 		.command = "set_active",
-		.dispatch = okay
+		.dispatch = set_active
 	},
 	[FASTBOOT_COMMAND_OEM_FORMAT] = {
 		.command = "oem format",
@@ -129,6 +132,53 @@ static const struct {
 		.dispatch = CONFIG_IS_ENABLED(FASTBOOT_UUU_SUPPORT, (run_acmd), (NULL))
 	},
 };
+
+static void continue_boot(char *cmd_parameter, char *response)
+{
+	/* Consumed by the USB fastboot command after the gadget is stopped. */
+	env_set("fastboot_continue_requested", "1");
+	fastboot_okay(NULL, response);
+}
+
+static void set_active(char *cmd_parameter, char *response)
+{
+#if defined(CONFIG_ANDROID_AB) && defined(CONFIG_FASTBOOT_FLASH_MMC)
+	struct disk_partition part_info;
+	struct blk_desc *dev_desc;
+	const char *suffix = cmd_parameter;
+	int slot, ret;
+
+	if (!suffix || !*suffix) {
+		fastboot_fail("missing slot", response);
+		return;
+	}
+	if (*suffix == '_')
+		suffix++;
+	if (suffix[0] < 'a' || suffix[0] >= 'a' + NUM_SLOTS ||
+	    suffix[1] != '\0') {
+		fastboot_fail("invalid slot", response);
+		return;
+	}
+
+	ret = fastboot_mmc_get_part_info("misc", &dev_desc, &part_info,
+					 response);
+	if (ret < 0)
+		return;
+
+	slot = suffix[0] - 'a';
+	ret = ab_set_active(dev_desc, &part_info, slot);
+	if (ret < 0) {
+		pr_err("Failed to activate Android slot %c: %d\n",
+		       BOOT_SLOT_NAME(slot), ret);
+		fastboot_fail("cannot set active slot", response);
+		return;
+	}
+
+	fastboot_okay(NULL, response);
+#else
+	fastboot_fail("A/B slots are not supported", response);
+#endif
+}
 
 /**
  * fastboot_handle_command - Handle fastboot command

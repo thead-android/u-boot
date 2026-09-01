@@ -198,6 +198,8 @@ static int do_abootimg_addr(struct cmd_tbl *cmdtp, int flag, int argc,
 	}
 
 	_abootimg_addr = img_addr;
+	_avendor_bootimg_addr = -1;
+	_ainit_bootimg_addr = -1;
 
 	if (argc > 2) {
 		img_addr = simple_strtoul(argv[2], &endp, 16);
