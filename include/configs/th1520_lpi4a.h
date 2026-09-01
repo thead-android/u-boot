@@ -18,6 +18,10 @@
 /* Environment options */
 
 #ifdef CONFIG_BOOTMETH_ANDROID
+/*
+ * "mmc dev 0 0" initializes eMMC and selects the user hwpart.  Avoid a
+ * redundant rescan, which can hang after the TH1520 fastboot gadget exits.
+ */
 #define CFG_EXTRA_ENV_SETTINGS \
 	"PS1=[LPi4A]# \0" \
 	"loadaddr=0x10000000\0" \
@@ -31,7 +35,7 @@
 	"android_setup=setenv loadaddr 0x10000000; setenv kernel_addr_r 0x04000000; " \
 		"setenv vendor_boot_comp_addr_r 0x18000000; setenv ramdisk_addr_r 0x20000000; " \
 		"setenv init_boot_comp_addr_r 0x28000000; setenv fdt_addr_r 0x30000000\0" \
-	"android_mmc=mmc dev 0; mmc rescan\0" \
+	"android_mmc=mmc dev 0 0\0" \
 	"android_select_a=setenv android_slot a; setenv slot_suffix _a; " \
 		"setenv bs; setenv bz; setenv vs; setenv vz; setenv is; setenv iz; " \
 		"setenv android_has_init_boot\0" \
