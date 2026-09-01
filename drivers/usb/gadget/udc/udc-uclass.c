@@ -66,6 +66,7 @@ static int legacy_index;
 int udc_device_get_by_index(int index, struct udevice **udev)
 {
 	legacy_index = index;
+	*udev = NULL;
 	return board_usb_init(index, USB_INIT_DEVICE);
 }
 

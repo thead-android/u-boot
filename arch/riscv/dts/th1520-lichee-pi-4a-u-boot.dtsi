@@ -10,6 +10,12 @@
 	bootph-some-ram;
 };
 
+&pwm {
+	pinctrl-names = "default";
+	pinctrl-0 = <&fan_pins>;
+	status = "okay";
+};
+
 &padctrl0_apsys {
 	bootph-some-ram;
 };

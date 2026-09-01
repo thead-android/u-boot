@@ -18,22 +18,22 @@
  * | 31 - 25 | 24 - 20 | 19 - 15 | 14 - 12 | 11 - 7 | 6 - 0 |
  *   0000001    01011      rs1       000      00000  0001011
  *
- * sync.s
+ * sync.is
  * | 31 - 25 | 24 - 20 | 19 - 15 | 14 - 12 | 11 - 7 | 6 - 0 |
- *   0000000    11001     00000      000      00000  0001011
+ *   0000000    11011     00000      000      00000  0001011
  */
 #define DCACHE_IPA_A0	".long 0x02a5000b"
 #define DCACHE_CPA_A0	".long 0x0295000b"
 #define DCACHE_CIPA_A0	".long 0x02b5000b"
 
-#define SYNC_S		".long 0x0190000b"
+#define SYNC_IS		".long 0x01b0000b"
 
 void invalidate_dcache_range(unsigned long start, unsigned long end)
 {
 	register unsigned long i asm("a0") = start & ~(CONFIG_SYS_CACHELINE_SIZE - 1);
 	for (; i < end; i += CONFIG_SYS_CACHELINE_SIZE)
 		__asm__ __volatile__(DCACHE_IPA_A0);
-	__asm__ __volatile__(SYNC_S);
+	__asm__ __volatile__(SYNC_IS);
 }
 
 void flush_dcache_range(unsigned long start, unsigned long end)
@@ -41,5 +41,5 @@ void flush_dcache_range(unsigned long start, unsigned long end)
 	register unsigned long i asm("a0") = start & ~(CONFIG_SYS_CACHELINE_SIZE - 1);
 	for (; i < end; i += CONFIG_SYS_CACHELINE_SIZE)
 		__asm__ __volatile__(DCACHE_CPA_A0);
-	__asm__ __volatile__(SYNC_S);
+	__asm__ __volatile__(SYNC_IS);
 }

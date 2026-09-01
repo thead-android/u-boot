@@ -96,6 +96,13 @@ config PWM_SIFIVE
 	help
 	  This PWM is found SiFive's FU540 and other SoCs.
 
+config PWM_TH1520
+	bool "Enable support for the T-Head TH1520 PWM"
+	depends on DM_PWM && CLK
+	help
+	  Enable the six-channel PWM controller found on T-Head TH1520
+	  systems such as the Sipeed Lichee Pi 4A.
+
 config PWM_TEGRA
 	bool "Enable support for the Tegra PWM"
 	depends on ARCH_TEGRA

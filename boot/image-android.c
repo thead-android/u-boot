@@ -317,6 +317,12 @@ bool android_image_get_data(const void *boot_hdr, const void *vendor_boot_hdr,
 static ulong android_image_get_kernel_addr(struct andr_image_data *img_data,
 					   ulong comp)
 {
+	const struct legacy_img_hdr *ihdr =
+		(const struct legacy_img_hdr *)img_data->kernel_ptr;
+
+	if (image_get_magic(ihdr) == IH_MAGIC)
+		return image_get_load(ihdr);
+
 	/*
 	 * All the Android tools that generate a boot.img use this
 	 * address as the default.
@@ -862,7 +868,7 @@ static bool android_image_get_dtb_img_addr(ulong hdr_addr, ulong vhdr_addr, ulon
 		}
 		/* Calculate the address of DTB area in boot image */
 		dtb_img_addr = vhdr_addr;
-		dtb_img_addr += v_hdr->page_size;
+		dtb_img_addr += ALIGN(v_hdr->header_size, v_hdr->page_size);
 		if (v_hdr->vendor_ramdisk_size)
 			dtb_img_addr += ALIGN(v_hdr->vendor_ramdisk_size, v_hdr->page_size);
 		*addr = dtb_img_addr;

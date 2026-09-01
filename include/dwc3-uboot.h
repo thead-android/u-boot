@@ -37,6 +37,7 @@ struct dwc3_device {
 	unsigned dis_tx_ipgap_linecheck_quirk;
 	unsigned dis_enblslpm_quirk;
 	unsigned dis_u2_freeclk_exists_quirk;
+	unsigned legacy_phy_reset_quirk;
 	unsigned tx_de_emphasis_quirk;
 	unsigned tx_de_emphasis;
 	int index;

@@ -54,6 +54,11 @@ static inline void dwc3_flush_cache(uintptr_t addr, int length)
 	uintptr_t end_addr = ALIGN((uintptr_t)addr + length, CACHELINE_SIZE);
 
 	flush_dcache_range((unsigned long)start_addr, (unsigned long)end_addr);
+#ifdef CONFIG_SYS_CACHE_THEAD_CMO
+	/* Hand ownership of the DMA buffer to TH1520's non-coherent DWC3. */
+	invalidate_dcache_range((unsigned long)start_addr,
+				(unsigned long)end_addr);
+#endif
 }
 
 static inline void dwc3_invalidate_cache(uintptr_t addr, int length)
