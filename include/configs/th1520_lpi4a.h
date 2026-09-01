@@ -47,7 +47,7 @@
 		"clk_ignore_unused loop.max_part=7 loglevel=8 ignore_loglevel init=/init " \
 		"firmware_class.path=/vendor/firmware mitigations=off\0" \
 	"android_args_slot=setenv bootargs ${bootargs} androidboot.slot_suffix=${slot_suffix} " \
-		"androidboot.force_normal_boot=1 androidboot.verifiedbootstate=orange\0" \
+		"androidboot.verifiedbootstate=orange\0" \
 	"android_boot_selected=echo Booting Android slot ${slot_suffix}; " \
 		"if run android_setup && run android_load && run android_args_core && " \
 		"run android_args_slot; then bootm ${loadaddr}; " \
