@@ -19,8 +19,9 @@
 
 #ifdef CONFIG_BOOTMETH_ANDROID
 /*
- * "mmc dev 0 0" initializes eMMC and selects the user hwpart.  Avoid a
- * redundant rescan, which can hang after the TH1520 fastboot gadget exits.
+ * TH1520 cannot safely return to eMMC after tearing down the DWC3 fastboot
+ * gadget.  Reset on "continue", then cold-boot the BCB-selected slot.  The
+ * explicit hwpart keeps all normal Android reads in the eMMC user area.
  */
 #define CFG_EXTRA_ENV_SETTINGS \
 	"PS1=[LPi4A]# \0" \
@@ -31,7 +32,7 @@
 	"init_boot_comp_addr_r=0x28000000\0" \
 	"fdt_addr_r=0x30000000\0" \
 	"android_log_args=loglevel=4\0" \
-	"fastboot_continue=run boot_android\0" \
+	"fastboot_continue=reset\0" \
 	"android_setup=setenv loadaddr 0x10000000; setenv kernel_addr_r 0x04000000; " \
 		"setenv vendor_boot_comp_addr_r 0x18000000; setenv ramdisk_addr_r 0x20000000; " \
 		"setenv init_boot_comp_addr_r 0x28000000; setenv fdt_addr_r 0x30000000\0" \
