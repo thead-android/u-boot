@@ -406,12 +406,25 @@ static int fastboot_tx_write(const char *buffer, unsigned int buffer_size)
 	memcpy(in_req->buf, buffer, buffer_size);
 	in_req->length = buffer_size;
 
-	usb_ep_dequeue(fastboot_func->in_ep, in_req);
+	/*
+	 * Fastboot is request/response, so the previous IN request has normally
+	 * completed before the host can submit the next command. In particular,
+	 * dequeuing an already-completed request can wedge the TH1520 DWC3 after a
+	 * large download, before the final OKAY is queued.
+	 */
+	if (in_req->status == -EINPROGRESS) {
+		ret = usb_ep_dequeue(fastboot_func->in_ep, in_req);
+		if (ret) {
+			printf("Error %d on dequeue\n", ret);
+			return ret;
+		}
+	}
 
 	ret = usb_ep_queue(fastboot_func->in_ep, in_req, 0);
 	if (ret)
 		printf("Error %d on queue\n", ret);
-	return 0;
+
+	return ret;
 }
 
 static int fastboot_tx_write_str(const char *buffer)
