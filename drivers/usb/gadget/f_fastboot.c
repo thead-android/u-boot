@@ -31,12 +31,15 @@
 #define RX_ENDPOINT_MAXIMUM_PACKET_SIZE_1_1  (0x0040)
 #define TX_ENDPOINT_MAXIMUM_PACKET_SIZE      (0x0040)
 
-#define EP_BUFFER_SIZE			4096
+#define EP_BUFFER_SIZE			(100 * 1024)
 /*
  * EP_BUFFER_SIZE must always be an integral multiple of maxpacket size
  * (64 or 512 or 1024), else we break on certain controllers like DWC3
  * that expect bulk OUT requests to be divisible by maxpacket size.
  */
+
+typedef void (*fastboot_complete_t)(struct usb_ep *ep,
+				    struct usb_request *req);
 
 struct f_fastboot {
 	struct usb_function usb_function;
@@ -44,6 +47,10 @@ struct f_fastboot {
 	/* IN/OUT EP's and corresponding requests */
 	struct usb_ep *in_ep, *out_ep;
 	struct usb_request *in_req, *out_req;
+
+	/* Completion belonging to the response currently queued on in_req. */
+	fastboot_complete_t in_complete;
+	bool in_requeue_out;
 };
 
 static char fb_ext_prop_name[] = "DeviceInterfaceGUID";
@@ -203,6 +210,32 @@ static void fastboot_complete(struct usb_ep *ep, struct usb_request *req)
 	printf("status: %d ep '%s' trans: %d\n", status, ep->name, req->actual);
 }
 
+static void fastboot_in_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct f_fastboot *f_fb = fastboot_func;
+	fastboot_complete_t complete = f_fb->in_complete;
+	bool requeue_out = f_fb->in_requeue_out;
+	int ret;
+
+	/* A completion handler may detach USB or immediately queue a response. */
+	f_fb->in_complete = fastboot_complete;
+	f_fb->in_requeue_out = false;
+	if (complete)
+		complete(ep, req);
+
+	/* Reset/detach handlers may have freed req before returning. */
+	if (!requeue_out)
+		return;
+
+	if (req->status)
+		return;
+
+	f_fb->out_req->actual = 0;
+	ret = usb_ep_queue(f_fb->out_ep, f_fb->out_req, 0);
+	if (ret)
+		printf("Error %d on OUT queue after response\n", ret);
+}
+
 static int fastboot_bind(struct usb_configuration *c, struct usb_function *f)
 {
 	int id;
@@ -353,7 +386,9 @@ static int fastboot_set_alt(struct usb_function *f,
 		ret = -EINVAL;
 		goto err;
 	}
-	f_fb->in_req->complete = fastboot_complete;
+	f_fb->in_complete = fastboot_complete;
+	f_fb->in_requeue_out = false;
+	f_fb->in_req->complete = fastboot_in_complete;
 
 	ret = usb_ep_queue(f_fb->out_ep, f_fb->out_req, 0);
 	if (ret)
@@ -398,38 +433,44 @@ static int fastboot_add(struct usb_configuration *c)
 }
 DECLARE_GADGET_BIND_CALLBACK(usb_dnl_fastboot, fastboot_add);
 
-static int fastboot_tx_write(const char *buffer, unsigned int buffer_size)
+static int fastboot_tx_write(const char *buffer, unsigned int buffer_size,
+			     fastboot_complete_t complete, bool requeue_out)
 {
-	struct usb_request *in_req = fastboot_func->in_req;
+	struct f_fastboot *f_fb = fastboot_func;
+	struct usb_request *in_req = f_fb->in_req;
 	int ret;
+
+	if (buffer_size > EP_BUFFER_SIZE)
+		return -EMSGSIZE;
+
+	if (!complete)
+		complete = fastboot_complete;
+
+	/* Never overwrite or dequeue a response still owned by the controller. */
+	if (in_req->status == -EINPROGRESS) {
+		printf("Fastboot IN response still busy\n");
+		return -EBUSY;
+	}
 
 	memcpy(in_req->buf, buffer, buffer_size);
 	in_req->length = buffer_size;
+	f_fb->in_complete = complete;
+	f_fb->in_requeue_out = requeue_out;
 
-	/*
-	 * Fastboot is request/response, so the previous IN request has normally
-	 * completed before the host can submit the next command. In particular,
-	 * dequeuing an already-completed request can wedge the TH1520 DWC3 after a
-	 * large download, before the final OKAY is queued.
-	 */
-	if (in_req->status == -EINPROGRESS) {
-		ret = usb_ep_dequeue(fastboot_func->in_ep, in_req);
-		if (ret) {
-			printf("Error %d on dequeue\n", ret);
-			return ret;
-		}
-	}
-
-	ret = usb_ep_queue(fastboot_func->in_ep, in_req, 0);
-	if (ret)
+	ret = usb_ep_queue(f_fb->in_ep, in_req, 0);
+	if (ret) {
+		f_fb->in_complete = fastboot_complete;
+		f_fb->in_requeue_out = false;
 		printf("Error %d on queue\n", ret);
+	}
 
 	return ret;
 }
 
-static int fastboot_tx_write_str(const char *buffer)
+static int fastboot_tx_write_str(const char *buffer,
+				 fastboot_complete_t complete, bool requeue_out)
 {
-	return fastboot_tx_write(buffer, strlen(buffer));
+	return fastboot_tx_write(buffer, strlen(buffer), complete, requeue_out);
 }
 
 static void compl_do_reset(struct usb_ep *ep, struct usb_request *req)
@@ -468,6 +509,7 @@ static void rx_handler_dl_image(struct usb_ep *ep, struct usb_request *req)
 	unsigned int transfer_size = fastboot_data_remaining();
 	const unsigned char *buffer = req->buf;
 	unsigned int buffer_size = req->actual;
+	bool response_queued = false;
 
 	if (req->status != 0) {
 		printf("Bad status: %d\n", req->status);
@@ -479,7 +521,8 @@ static void rx_handler_dl_image(struct usb_ep *ep, struct usb_request *req)
 
 	fastboot_data_download(buffer, transfer_size, response);
 	if (response[0]) {
-		fastboot_tx_write_str(response);
+		fastboot_tx_write_str(response, fastboot_complete, true);
+		response_queued = true;
 	} else if (!fastboot_data_remaining()) {
 		fastboot_data_complete(response);
 
@@ -489,13 +532,15 @@ static void rx_handler_dl_image(struct usb_ep *ep, struct usb_request *req)
 		req->complete = rx_handler_command;
 		req->length = EP_BUFFER_SIZE;
 
-		fastboot_tx_write_str(response);
+		fastboot_tx_write_str(response, fastboot_complete, true);
+		response_queued = true;
 	} else {
 		req->length = rx_bytes_expected(ep);
 	}
 
 	req->actual = 0;
-	usb_ep_queue(ep, req, 0);
+	if (!response_queued)
+		usb_ep_queue(ep, req, 0);
 }
 
 static void do_exit_on_complete(struct usb_ep *ep, struct usb_request *req)
@@ -513,19 +558,23 @@ static int multiresponse_cmd = -1;
 static void multiresponse_on_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	char response[FASTBOOT_RESPONSE_LEN] = {0};
+	fastboot_complete_t complete = multiresponse_on_complete;
+	bool requeue_out = false;
 
 	if (multiresponse_cmd == -1)
 		return;
 
 	/* Call handler to obtain next response */
 	fastboot_multiresponse(multiresponse_cmd, response);
-	fastboot_tx_write_str(response);
 
-	/* If response is final OKAY/FAIL response disconnect this handler and unset cmd */
+	/* If response is final OKAY/FAIL response, finish the response chain. */
 	if (!strncmp("OKAY", response, 4) || !strncmp("FAIL", response, 4)) {
 		multiresponse_cmd = -1;
-		fastboot_func->in_req->complete = fastboot_complete;
+		complete = fastboot_complete;
+		requeue_out = true;
 	}
+
+	fastboot_tx_write_str(response, complete, requeue_out);
 }
 
 static void do_acmd_complete(struct usb_ep *ep, struct usb_request *req)
@@ -542,6 +591,8 @@ static void rx_handler_command(struct usb_ep *ep, struct usb_request *req)
 {
 	char *cmdbuf = req->buf;
 	char response[FASTBOOT_RESPONSE_LEN] = {0};
+	fastboot_complete_t complete = fastboot_complete;
+	bool requeue_out = true;
 	int cmd = -1;
 
 	if (req->status != 0 || req->length == 0)
@@ -561,7 +612,8 @@ static void rx_handler_command(struct usb_ep *ep, struct usb_request *req)
 
 		/* Only add complete callback if first is not a final OKAY/FAIL response */
 		if (strncmp("OKAY", response, 4) && strncmp("FAIL", response, 4)) {
-			fastboot_func->in_req->complete = multiresponse_on_complete;
+			complete = multiresponse_on_complete;
+			requeue_out = false;
 		}
 	}
 
@@ -573,29 +625,31 @@ static void rx_handler_command(struct usb_ep *ep, struct usb_request *req)
 	if (!strncmp("OKAY", response, 4)) {
 		switch (cmd) {
 		case FASTBOOT_COMMAND_BOOT:
-			fastboot_func->in_req->complete = do_bootm_on_complete;
+			complete = do_bootm_on_complete;
+			requeue_out = false;
 			break;
 
 		case FASTBOOT_COMMAND_CONTINUE:
-			fastboot_func->in_req->complete = do_exit_on_complete;
+			complete = do_exit_on_complete;
+			requeue_out = false;
 			break;
 
 		case FASTBOOT_COMMAND_REBOOT:
 		case FASTBOOT_COMMAND_REBOOT_BOOTLOADER:
 		case FASTBOOT_COMMAND_REBOOT_FASTBOOTD:
 		case FASTBOOT_COMMAND_REBOOT_RECOVERY:
-			fastboot_func->in_req->complete = compl_do_reset;
+			complete = compl_do_reset;
+			requeue_out = false;
 			break;
 		case FASTBOOT_COMMAND_ACMD:
 			if (CONFIG_IS_ENABLED(FASTBOOT_UUU_SUPPORT))
-				fastboot_func->in_req->complete = do_acmd_complete;
+				complete = do_acmd_complete;
 			break;
 		}
 	}
 
-	fastboot_tx_write_str(response);
+	fastboot_tx_write_str(response, complete, requeue_out);
 
 	*cmdbuf = '\0';
 	req->actual = 0;
-	usb_ep_queue(ep, req, 0);
 }
