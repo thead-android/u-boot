@@ -1085,6 +1085,21 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 	}
 
 	/*
+	 * A bulk IN token can arrive while an OUT completion callback is
+	 * queuing the response.  Starting an idle IN endpoint immediately
+	 * avoids relying on a possibly coalesced XferNotReady event.  This
+	 * also matches the current Linux DWC3 queueing model.
+	 */
+	if (dep->direction && usb_endpoint_xfer_bulk(dep->endpoint.desc) &&
+	    !(dep->flags & DWC3_EP_BUSY)) {
+		ret = __dwc3_gadget_kick_transfer(dep, 0, true);
+		if (ret)
+			dev_dbg(dwc->dev, "%s: failed to start IN transfer\n",
+				dep->name);
+		return ret;
+	}
+
+	/*
 	 * 4. Stream Capable Bulk Endpoints. We need to start the transfer
 	 * right away, otherwise host will not know we have streams to be
 	 * handled.
