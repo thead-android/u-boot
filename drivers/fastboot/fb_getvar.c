@@ -243,6 +243,22 @@ static void __maybe_unused getvar_has_slot(char *part_name, char *response)
 	if (!part_name || part_name[0] == '\0')
 		goto fail;
 
+	/*
+	 * Host fastboot also asks has-slot for an explicitly suffixed target,
+	 * such as boot_a.  Treat that as an exact, unslotted name; appending a
+	 * second suffix probes boot_a_a and produces a misleading partition
+	 * lookup failure before every otherwise-valid flash operation.
+	 */
+	len = strlen(part_name);
+	if (len >= 2 && part_name[len - 2] == '_' &&
+	    part_name[len - 1] >= 'a' &&
+	    part_name[len - 1] < 'a' + NUM_SLOTS) {
+		r = getvar_get_part_info(part_name, response, NULL);
+		if (r >= 0)
+			fastboot_okay("no", response);
+		return;
+	}
+
 	/* part_name_wslot = part_name + "_a" */
 	len = strlcpy(part_name_wslot, part_name, PART_NAME_LEN - 3);
 	if (len >= PART_NAME_LEN - 3)
