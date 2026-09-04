@@ -119,9 +119,11 @@ exit:
 	g_dnl_clear_detach();
 
 	if (env_get("fastboot_continue_requested")) {
-		const char *continue_cmd = env_get("fastboot_continue");
+		const char *continue_cmd;
 
+		/* env_set() may invalidate pointers returned by env_get(). */
 		env_set("fastboot_continue_requested", NULL);
+		continue_cmd = env_get("fastboot_continue");
 		if (continue_cmd)
 			ret = run_command(continue_cmd, 0);
 	}

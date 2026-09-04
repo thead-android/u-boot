@@ -548,6 +548,19 @@ static void do_exit_on_complete(struct usb_ep *ep, struct usb_request *req)
 	g_dnl_trigger_detach();
 }
 
+static void do_continue_on_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	const char *continue_cmd = env_get("fastboot_continue");
+
+	/* Reset before returning through a controller teardown known to be unsafe. */
+	if (continue_cmd && !strcmp(continue_cmd, "reset")) {
+		compl_do_reset(ep, req);
+		return;
+	}
+
+	do_exit_on_complete(ep, req);
+}
+
 static void do_bootm_on_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	fastboot_boot();
@@ -630,7 +643,7 @@ static void rx_handler_command(struct usb_ep *ep, struct usb_request *req)
 			break;
 
 		case FASTBOOT_COMMAND_CONTINUE:
-			complete = do_exit_on_complete;
+			complete = do_continue_on_complete;
 			requeue_out = false;
 			break;
 
