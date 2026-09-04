@@ -40,6 +40,10 @@
 	"android_bootloader_requested=if bcb load mmc 0 misc; then " \
 		"if bcb test command = bootonce-bootloader; then " \
 		"echo BCB requests bootloader; bcb clear command; bcb store; true; " \
+		"elif bcb test command = boot-recovery && " \
+		"bcb test recovery ~ --fastboot; then " \
+		"echo BCB requests Android fastboot; bcb clear command; " \
+		"bcb clear recovery; bcb store; true; " \
 		"else false; fi; else false; fi\0" \
 	"android_select_a=setenv android_slot a; setenv slot_suffix _a; " \
 		"setenv bs; setenv bz; setenv vs; setenv vz; setenv is; setenv iz; " \
